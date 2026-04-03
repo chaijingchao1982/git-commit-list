@@ -19,9 +19,10 @@ import (
 )
 
 const (
-	outputFile     = "output.xlsx"
-	sheetName      = "Sheet1"
-	mainBranchName = "main"
+	outputFile       = "output.xlsx"
+	sheetName        = "Sheet1"
+	mainBranchName   = "main"
+	masterBranchName = "master"
 )
 
 func main() {
@@ -56,8 +57,8 @@ func run(repoPath string) int {
 		return 1
 	}
 	log.Printf("[INFO] current branch: %s", branchName)
-	if branchName != mainBranchName {
-		log.Printf("[ERROR] current branch is '%s', please switch to '%s' branch before running", branchName, mainBranchName)
+	if branchName != mainBranchName && branchName != masterBranchName {
+		log.Printf("[ERROR] current branch is '%s', please switch to '%s' or '%s' branch before running", branchName, mainBranchName, masterBranchName)
 		return 1
 	}
 

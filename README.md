@@ -8,27 +8,18 @@
 
 ## 用法
 
-- 首先要在 output.xlsx 中填写一个起始的 commit id，例如：xxx 功能  e56a1234，之后每次运行本工具，都会将最新的 commit 信息追加到文件最后
-- 执行命令之前确保 git 仓库已经切换到了 main 分支，且 git pull 拉取了最新代码
-- 命令：go run main.go [git-repo-path]
-- 推荐使用 Makefile 简化使用
-
-    在 Makefile 中添加：
+- 使用 go install 安装本工具
 
     ```shell
-    go run main.go "/home/chaijingchao/xxx"
-    ````
+    go install github.com/chaijingchao1982/git-commit-list/cmd/git-commit-list@latest
+    ```
 
-    使用 Makefile 命令：
+- 创建一个工作目录，新建 output.xlsx 文件，并填写起始的 commit id，[参考例子](./output.xlsx)。
+
+  之后的每次执行命令，都会将最新的 commit 信息追加到 output.xlsx 文件的最后。
+
+- 运行工具
 
     ```shell
-    make update
-    ````
-
-## 输出格式
-
-```shell
-提交日志1  commit-id1
-提交日志2  commit-id2
-提交日志3  commit-id3
-````
+    git-commit-list {your-git-repo-path}
+    ```
