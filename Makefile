@@ -7,4 +7,4 @@ RESET	:= $(shell tput -Txterm sgr0)
 
 update: 
 	echo "$(CYAN)show git commit list$(RESET)"
-	go run cmd/git-commit-list/main.go "/home/chaijingchao/xxx"
+	go run cmd/git-commit-list/main.go "{your-git-repo-path}"
