@@ -1,0 +1,64 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+__debug_bin*
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+
+# Go workspace files
+go.work
+go.work.sum
+
+# OS General
+.DS_Store
+Thumbs.db
+
+# IDE directories and files
+# Visual Studio Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+# GoLand
+.idea/
+# VIM
+*.swp
+
+# except for .gitkeep
+!**/.gitkeep
+
+# Project files
+.protoc
+*.cert
+*.key
+.cache
+test.json
+coverage.out
+coverage.html
+
+svc/game/runtime/*/data/*
+runtime/*/data/*
+service/*/log/*
+pkg/excel/bin/*
+config.mk
+
+# Designer's Game Config Data
+# 以 / 开头表示根目录,防止递归（pkg 下有同名 cfg)
+/cfg/bin/*
+/bin/*
+
+# Output log
+/var/
+logs
+*.log
+/sensitive
+/bin
