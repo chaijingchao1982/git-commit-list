@@ -66,3 +66,46 @@ func AppendRow(f *excelize.File, sheet, subject, commitHash string) error {
 
 	return nil
 }
+
+const metaSheet = "Meta"
+
+// ReadCheckpointHash 从 Meta 工作表的 A1 单元格读取 checkpoint commit hash。
+// 若 Meta sheet 不存在或为空则返回空字符串。
+func ReadCheckpointHash(filename string) (string, error) {
+	f, err := excelize.OpenFile(filename)
+	if err != nil {
+		return "", fmt.Errorf("打开文件 %s 失败: %w", filename, err)
+	}
+	defer f.Close()
+
+	val, err := f.GetCellValue(metaSheet, "A1")
+	if err != nil {
+		// Meta sheet 不存在时 excelize 会返回错误，视为空 checkpoint
+		return "", nil
+	}
+	return val, nil
+}
+
+// WriteCheckpointHash 将 checkpoint commit hash 写入 Meta 工作表的 A1 单元格。
+func WriteCheckpointHash(f *excelize.File, hash string) error {
+	if f == nil {
+		return fmt.Errorf("excelize.File 为 nil")
+	}
+
+	// 若 Meta sheet 不存在则创建
+	if idx, _ := f.GetSheetIndex(metaSheet); idx == -1 {
+		if _, err := f.NewSheet(metaSheet); err != nil {
+			return fmt.Errorf("创建 Meta 工作表失败: %w", err)
+		}
+	}
+
+	if err := f.SetCellValue(metaSheet, "A1", hash); err != nil {
+		return fmt.Errorf("写入 checkpoint hash 失败: %w", err)
+	}
+
+	if err := f.Save(); err != nil {
+		return fmt.Errorf("保存文件失败：%w", err)
+	}
+
+	return nil
+}

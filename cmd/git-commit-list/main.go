@@ -37,10 +37,19 @@ func main() {
 }
 
 func run(repoPath string) int {
-	lastCommitHash, err := excel.ReadLastCommitHash(outputFile, sheetName)
+	// Read checkpoint from Meta sheet first; fall back to Sheet1 last row
+	// for backward compatibility with Excel files created by older versions.
+	lastCommitHash, err := excel.ReadCheckpointHash(outputFile)
 	if err != nil {
-		log.Printf("[ERROR] failed to read last commit: %v", err)
+		log.Printf("[ERROR] failed to read checkpoint: %v", err)
 		return 1
+	}
+	if lastCommitHash == "" {
+		lastCommitHash, err = excel.ReadLastCommitHash(outputFile, sheetName)
+		if err != nil {
+			log.Printf("[ERROR] failed to read last commit: %v", err)
+			return 1
+		}
 	}
 	hashPrefixLen := len(lastCommitHash)
 	log.Printf("[INFO] last commit: %s (len %d)", lastCommitHash, hashPrefixLen)
@@ -82,16 +91,80 @@ func run(repoPath string) int {
 		return 1
 	}
 
-	sort.Slice(commits, func(i, j int) bool {
-		return commits[i].Author.When.Before(commits[j].Author.When)
-	})
+	// Sort commits chronologically, with topological order (ancestor before
+	// descendant) as a hard guarantee for commits with identical timestamps.
+	commits = topologicalSortByTime(commits)
 
-	if err := writeCommitsToExcel(outputFile, sheetName, commits, hashPrefixLen); err != nil {
+	if err := writeCommitsToExcel(outputFile, sheetName, commits, hashPrefixLen, headHash.String()); err != nil {
 		log.Printf("[ERROR] failed to write commits to Excel: %v", err)
 		return 1
 	}
 
 	return 0
+}
+
+// topologicalSortByTime returns commits ordered by Author.When (ascending),
+// with the topological constraint that a commit never appears before any of
+// its ancestors that are present in the same slice. This is implemented with
+// Kahn's algorithm: commits become "ready" only after all their in-set parents
+// have been emitted, so same-timestamp commits are always output in
+// ancestor-first order regardless of how go-git traversed the DAG.
+func topologicalSortByTime(commits []*object.Commit) []*object.Commit {
+	inSet := make(map[plumbing.Hash]bool, len(commits))
+	for _, c := range commits {
+		inSet[c.Hash] = true
+	}
+
+	commitMap := make(map[plumbing.Hash]*object.Commit, len(commits))
+	for _, c := range commits {
+		commitMap[c.Hash] = c
+	}
+
+	// Build parent→children map and compute in-degrees within the set.
+	children := make(map[plumbing.Hash][]plumbing.Hash)
+	inDegree := make(map[plumbing.Hash]int, len(commits))
+	for _, c := range commits {
+		for _, ph := range c.ParentHashes {
+			if inSet[ph] {
+				children[ph] = append(children[ph], c.Hash)
+				inDegree[c.Hash]++
+			}
+		}
+	}
+
+	// Seed the ready queue with commits that have no in-set parents.
+	ready := make([]*object.Commit, 0)
+	for _, c := range commits {
+		if inDegree[c.Hash] == 0 {
+			ready = append(ready, c)
+		}
+	}
+	sort.SliceStable(ready, func(i, j int) bool {
+		return ready[i].Author.When.Before(ready[j].Author.When)
+	})
+
+	result := make([]*object.Commit, 0, len(commits))
+	for len(ready) > 0 {
+		curr := ready[0]
+		ready = ready[1:]
+		result = append(result, curr)
+
+		for _, childHash := range children[curr.Hash] {
+			inDegree[childHash]--
+			if inDegree[childHash] == 0 {
+				child := commitMap[childHash]
+				// Binary-search insertion to keep ready sorted by Author.When.
+				pos := sort.Search(len(ready), func(i int) bool {
+					return !ready[i].Author.When.Before(child.Author.When)
+				})
+				ready = append(ready, nil)
+				copy(ready[pos+1:], ready[pos:])
+				ready[pos] = child
+			}
+		}
+	}
+
+	return result
 }
 
 // collectCommits collects all commits from HEAD to stopHash (excluding stopHash).
@@ -117,8 +190,10 @@ func collectCommits(repo *git.Repository, headHash, stopHash plumbing.Hash) ([]*
 	return commits, nil
 }
 
-// writeCommitsToExcel appends commit records to an Excel file and prints aligned summaries to the terminal.
-func writeCommitsToExcel(filename, sheet string, commits []*object.Commit, hashPrefixLen int) error {
+// writeCommitsToExcel appends commit records to an Excel file, prints aligned
+// summaries to the terminal, and persists headHash as the checkpoint for the
+// next incremental run.
+func writeCommitsToExcel(filename, sheet string, commits []*object.Commit, hashPrefixLen int, headHash string) error {
 	f, err := excelize.OpenFile(filename)
 	if err != nil {
 		return fmt.Errorf("failed to open file %s: %w", filename, err)
@@ -143,6 +218,12 @@ func writeCommitsToExcel(filename, sheet string, commits []*object.Commit, hashP
 		}
 
 		printAligned(subject, shortHash, alignCol)
+	}
+
+	// Always update the checkpoint to HEAD so the next run starts from exactly
+	// where we left off, regardless of how commits were sorted above.
+	if err := excel.WriteCheckpointHash(f, headHash); err != nil {
+		return fmt.Errorf("failed to write checkpoint: %w", err)
 	}
 
 	return nil
