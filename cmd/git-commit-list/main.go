@@ -37,22 +37,27 @@ func main() {
 }
 
 func run(repoPath string) int {
-	// Read checkpoint from Meta sheet first; fall back to Sheet1 last row
-	// for backward compatibility with Excel files created by older versions.
+	// hashPrefixLen is always derived from Sheet1 last row so it matches the
+	// user's intended short-hash length, regardless of what is stored in Meta.
+	lastShortHash, err := excel.ReadLastCommitHash(outputFile, sheetName)
+	if err != nil {
+		log.Printf("[ERROR] failed to read last commit: %v", err)
+		return 1
+	}
+	hashPrefixLen := len(lastShortHash)
+
+	// Checkpoint hash (used for git resolution) comes from Meta sheet so it is
+	// always the exact HEAD hash from the previous run. Fall back to the short
+	// hash in Sheet1 for Excel files created by older versions of this tool.
 	lastCommitHash, err := excel.ReadCheckpointHash(outputFile)
 	if err != nil {
 		log.Printf("[ERROR] failed to read checkpoint: %v", err)
 		return 1
 	}
 	if lastCommitHash == "" {
-		lastCommitHash, err = excel.ReadLastCommitHash(outputFile, sheetName)
-		if err != nil {
-			log.Printf("[ERROR] failed to read last commit: %v", err)
-			return 1
-		}
+		lastCommitHash = lastShortHash
 	}
-	hashPrefixLen := len(lastCommitHash)
-	log.Printf("[INFO] last commit: %s (len %d)", lastCommitHash, hashPrefixLen)
+	log.Printf("[INFO] last commit: %s (prefix len %d)", lastCommitHash, hashPrefixLen)
 
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
@@ -202,7 +207,7 @@ func writeCommitsToExcel(filename, sheet string, commits []*object.Commit, hashP
 
 	maxWidth := 0
 	for _, c := range commits {
-		subject := strings.SplitN(c.Message, "\n", 2)[0]
+		subject := strings.TrimSpace(strings.SplitN(c.Message, "\n", 2)[0])
 		if w := runewidth.StringWidth(subject); w > maxWidth {
 			maxWidth = w
 		}
@@ -210,7 +215,7 @@ func writeCommitsToExcel(filename, sheet string, commits []*object.Commit, hashP
 	alignCol := maxWidth + 4
 
 	for _, c := range commits {
-		subject := strings.SplitN(c.Message, "\n", 2)[0]
+		subject := strings.TrimSpace(strings.SplitN(c.Message, "\n", 2)[0])
 		shortHash := c.Hash.String()[:hashPrefixLen]
 
 		if err := excel.AppendRow(f, sheet, subject, shortHash); err != nil {
